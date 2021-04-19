@@ -6,8 +6,8 @@ from pathlib import Path
 import os
 from mayavi import mlab
 import matplotlib.pyplot as plt
-# import gc
-# # from sympy.core.cache import clear_cache()
+import pandas as pd
+
 import tracemalloc
 import sys,os
 
@@ -164,6 +164,7 @@ def imgProcess(seq,cubiod_pandas,j):
         cubiod_projected_2d.append(cur_2d)
 
     cubiod_projected_2d = np.array(cubiod_projected_2d)
+    cubiod_projected_2d = cubiod_projected_2d.astype(np.float32)
     return  cubiod_pandas, cubiod_projected_2d
 
 def transfer(i):
@@ -177,7 +178,7 @@ def transfer(i):
         
         for j0 in range(0,80): # train data j0->frame
             print('now is processing {} sequence, {}th frame'.format(i,j0))
-            lidar_pose = seq.lidar.poses[j0] # 获取第0帧的雷达传感器姿态，包括偏移量和四元数
+            lidar_pose = seq.lidar.poses[j0] # get lidar poses
 
             # annotation transfer
             lidar_pandas = seq.lidar[j0]
@@ -190,17 +191,29 @@ def transfer(i):
             cubiod_pandas.iloc[:,5:11] = matric_res[:,1:7]
             cubiod_pandas['label']=cubiod_pandas['label'].str.replace(' ','_')
             cubiod_pandas['label']=cubiod_pandas['label'].str.replace('-','_')
-            # Aggregate data
-            kitti = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype='object')
-            kitti[:,0] = cubiod_pandas['label'] #标签
-            kitti[:,4:8] = cubiod_projected_2d #长方体projected 2d xmin、ymin、xmax、ymax
-            kitti[:,8]= cubiod_pandas.iloc[:,10] #h
-            kitti[:,9]= cubiod_pandas.iloc[:,8]  #w
-            kitti[:,10]= cubiod_pandas.iloc[:,9]  #l
-            kitti[:,11:14] = cubiod_pandas.iloc[:,5:8] #长方体点云坐标 position区域
-            kitti[:,14] = cubiod_pandas['yaw'] #rotation
+            # Aggregate data 
+            '''
+              dataType must be float32, since in the framework, np read the file as float32
+              if directly use 'object' type to contain float32 data, the data would be randomly extend to 64 bit
+              Therefore, firstly process number data and transfer it to string, and then add the label column which is string type 
+            '''
+            kitti = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype= np.float32)
+            kitti[:,4:8] = cubiod_projected_2d #cubiod projected 2d xmin、ymin、xmax、ymax
+            kitti[:,8]= cubiod_pandas.iloc[:,10].astype(np.float32) #h
+            kitti[:,9]= cubiod_pandas.iloc[:,8].astype(np.float32)  #w
+            kitti[:,10]= cubiod_pandas.iloc[:,9].astype(np.float32)  #l
+            kitti[:,11:14] = cubiod_pandas.iloc[:,5:8].astype(np.float32) # cubiod position
+            kitti[:,14] = cubiod_pandas['yaw'].astype(np.float32) #rotation
+            [rows,cols] = kitti.shape
+
+            kitti_str = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype='object')
+            for i in range(rows):
+                 for j in range(cols):
+                    kitti_str[i,j] = str(kitti[i,j])
             
-            
+            kitti = kitti_str
+            kitti[:,0] = cubiod_pandas['label'] #label
+            print(kitti[0])
             # lidarPoint transfer
             lidar_np = lidar_pandas.to_numpy()[:,:4]
             ego_lidar_np = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
@@ -221,7 +234,7 @@ def transfer(i):
                 path_img = os.path.join(dir_img_test,str(idx).rjust(6,'0')+'.png')
 
             
-            lidar_np.astype(float) # save lidar
+            lidar_np = lidar_np.astype(np.float32) # save lidar
             lidar_np.tofile(path_lidar)
             np.savetxt(path_label, kitti, delimiter=" ",fmt='%s') # annotation 
             img.save(path_img,'png')# img

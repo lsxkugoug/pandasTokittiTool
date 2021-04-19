@@ -3,6 +3,7 @@ from pandaset import DataSet
 import sys
 init = 0
 print('the transfered data would be stored in ../"root"/padsToKit dir')
+print('if the dir is already exist, please delete it')
 print('please input the pandaset root path:')
 pd_root = input()
 dataset = DataSet(pd_root)
