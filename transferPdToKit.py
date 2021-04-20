@@ -207,13 +207,12 @@ def transfer(i):
             [rows,cols] = kitti.shape
 
             kitti_str = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype='object')
-            for i in range(rows):
-                 for j in range(cols):
-                    kitti_str[i,j] = str(kitti[i,j])
+            for i3 in range(rows):
+                 for j3 in range(cols):
+                    kitti_str[i3,j3] = str(kitti[i3,j3])
             
             kitti = kitti_str
             kitti[:,0] = cubiod_pandas['label'] #label
-            print(kitti[0])
             # lidarPoint transfer
             lidar_np = lidar_pandas.to_numpy()[:,:4]
             ego_lidar_np = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
