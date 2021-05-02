@@ -62,7 +62,6 @@ def cuboids_to_boxes(cuboids0, poses):
 def filterByDensity(cubiod_pandas,lidar_pandas):
     '''
     this method is used to filter the data of machine lidar
-
     using density to swipe out the machine lidar data of sensor_id = -1, 
     which is mixture of solid lidar and machine lidar
     '''
@@ -167,6 +166,28 @@ def imgProcess(seq,cubiod_pandas,j):
     cubiod_projected_2d = cubiod_projected_2d.astype(np.float32)
     return  cubiod_pandas, cubiod_projected_2d
 
+# kitti format write the annotation
+def write_file(filename, annos, num):
+    h_all,w_all,l_all,x_all,y_all,z_all,ry_all,label_all,bboxes_all = annos
+    with open(filename,'w') as f:
+        for k in range(num):
+            h = h_all[k]
+            w = w_all[k]
+            l = l_all[k]
+            x = x_all[k]
+            y = y_all[k]
+            z = z_all[k]
+            ry = ry_all[k]
+            ry = math.degrees(ry)
+            label = str(label_all[k])
+            bboxes = bboxes_all[k]
+            beta = np.arctan2(z, x)
+            alpha = -np.sign(beta) * np.pi / 2 + beta + ry
+            annotations = '%s 0 0 %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f 0'%(label,alpha,bboxes[0],bboxes[1],bboxes[2],bboxes[3],h,w,l,x,y,z,ry)
+            f.write(annotations)
+            f.write('\n')
+    f.close()
+
 def transfer(i):
 
         dataset = DataSet(pd_root)
@@ -197,22 +218,20 @@ def transfer(i):
               if directly use 'object' type to contain float32 data, the data would be randomly extend to 64 bit
               Therefore, firstly process number data and transfer it to string, and then add the label column which is string type 
             '''
-            kitti = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype= np.float32)
-            kitti[:,4:8] = cubiod_projected_2d #cubiod projected 2d xmin、ymin、xmax、ymax
-            kitti[:,8]= cubiod_pandas.iloc[:,10].astype(np.float32) #h
-            kitti[:,9]= cubiod_pandas.iloc[:,8].astype(np.float32)  #w
-            kitti[:,10]= cubiod_pandas.iloc[:,9].astype(np.float32)  #l
-            kitti[:,11:14] = cubiod_pandas.iloc[:,5:8].astype(np.float32) # cubiod position
-            kitti[:,14] = cubiod_pandas['yaw'].astype(np.float32) #rotation
-            [rows,cols] = kitti.shape
+            label_all = cubiod_pandas['label'].to_numpy() #标签
+            bboxes_all = cubiod_projected_2d.astype(np.float32) #长方体projected 2d xmin、ymin、xmax、ymax
 
-            kitti_str = np.zeros(shape=(cubiod_pandas.shape[0],16),dtype='object')
-            for i3 in range(rows):
-                 for j3 in range(cols):
-                    kitti_str[i3,j3] = str(kitti[i3,j3])
+
+            h_all = cubiod_pandas.iloc[:,10].to_numpy().astype(np.float32) #h
+            w_all = cubiod_pandas.iloc[:,8].to_numpy().astype(np.float32)  #w
+            l_all = cubiod_pandas.iloc[:,9].to_numpy().astype(np.float32) #l
+            position = cubiod_pandas.iloc[:,5:8].to_numpy().astype(np.float32) #长方体点云坐标 position区域
+            ry_all = cubiod_pandas['yaw'].to_numpy().astype(np.float32) #rotation
+            x_all = position[:,0]
+            y_all = position[:,1]
+            z_all = position[:,2]
             
-            kitti = kitti_str
-            kitti[:,0] = cubiod_pandas['label'] #label
+            #print(x_all)
             # lidarPoint transfer
             lidar_np = lidar_pandas.to_numpy()[:,:4]
             ego_lidar_np = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
@@ -233,9 +252,11 @@ def transfer(i):
                 path_img = os.path.join(dir_img_test,str(idx).rjust(6,'0')+'.png')
 
             
-            lidar_np = lidar_np.astype(np.float32) # save lidar
-            lidar_np.tofile(path_lidar)
-            np.savetxt(path_label, kitti, delimiter=" ",fmt='%s') # annotation 
+            lidar_np = np.float32(np.around(lidar_np,4)) # save lidar
+            with open(path_lidar,"w") as f:
+                lidar_np.tofile(f)
+            write_file(path_label,(h_all,w_all,l_all,x_all,y_all,z_all,ry_all,label_all,bboxes_all),cubiod_pandas.shape[0])
+            # annotation 
             img.save(path_img,'png')# img
 
             kitti = None
@@ -256,12 +277,12 @@ def createFile(init):
     kitti_root = os.path.join(parentPath,'padsToKit')
 
     global dir_img_test,dir_img_train,dir_label_test,dir_label_train,dir_lidar_test,dir_lidar_train
-    dir_img_test = os.path.join(kitti_root,'data_object_image','testing','image')
-    dir_img_train = os.path.join(kitti_root,'data_object_image','training','image')  
-    dir_label_test = os.path.join(kitti_root,'data_object_label','testing','label')
-    dir_label_train = os.path.join(kitti_root,'data_object_label','training','label')
-    dir_lidar_test = os.path.join(kitti_root,'data_object_velodyne','testing','velodyne')
-    dir_lidar_train = os.path.join(kitti_root,'data_object_velodyne','training','velodyne')
+    dir_img_test = os.path.join(kitti_root,'testing','image')
+    dir_img_train = os.path.join(kitti_root,'training','image')  
+    dir_label_test = os.path.join(kitti_root,'testing','label')
+    dir_label_train = os.path.join(kitti_root,'training','label')
+    dir_lidar_test = os.path.join(kitti_root,'testing','lidar')
+    dir_lidar_train = os.path.join(kitti_root,'training','lidar')
     if(init == '0'):
         os.makedirs(dir_img_test),os.makedirs(dir_img_train),os.makedirs(dir_label_test),os.makedirs(dir_label_train),os.makedirs(dir_lidar_test),os.makedirs(dir_lidar_train)
     
@@ -274,5 +295,3 @@ if __name__ == '__main__':
     createFile(init) 
     transfer(seqNum)
 
-
-        
