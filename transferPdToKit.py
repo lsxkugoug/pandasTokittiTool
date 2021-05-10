@@ -27,36 +27,34 @@ def cuboids_to_boxes(cuboids0, poses):
     numb_ob = 0
     for i, row in cuboids0.iterrows():
         
-            # 　坐标信息
-            box = row["position.x"], row["position.y"], row["position.z"], row["dimensions.x"], row["dimensions.y"],  row["dimensions.z"], row["yaw"]
-            # 将中心点，长宽高和航向角信息转变为８个顶点的信息
-            corners = geometry.center_box_to_corners(box)
-            rotate_corners = geometry.lidar_points_to_ego(corners, poses)  
-            # 将８个顶点的坐标位置进行坐标系转换
-            s = rotate_corners
-            p0 = [s[0][0], s[0][1], s[0][2]]
-            p1 = [s[1][0], s[1][1], s[1][2]]
-            p2 = [s[2][0], s[2][1], s[2][2]]
-            p3 = [s[3][0], s[3][1], s[3][2]]
-            p4 = [s[4][0], s[4][1], s[4][2]]
-            p5 = [s[5][0], s[5][1], s[5][2]]
-            p6 = [s[6][0], s[6][1], s[6][2]]
-            p7 = [s[7][0], s[7][1], s[7][2]]
+
+        box = row["position.x"], row["position.y"], row["position.z"], row["dimensions.x"], row["dimensions.y"],  row["dimensions.z"], row["yaw"]
+        corners = geometry.center_box_to_corners(box)
+        rotate_corners = geometry.lidar_points_to_ego(corners, poses)
+
+        s = rotate_corners
+        s[:,[0,1]] = s[:,[1,0]]
+
+        p0 = [s[0][0], s[0][1], s[0][2]]
+        p1 = [s[1][0], s[1][1], s[1][2]]
+        p2 = [s[2][0], s[2][1], s[2][2]]
+        p3 = [s[3][0], s[3][1], s[3][2]]
+        p4 = [s[4][0], s[4][1], s[4][2]]
+        p5 = [s[5][0], s[5][1], s[5][2]]
+        p6 = [s[6][0], s[6][1], s[6][2]]
+        p7 = [s[7][0], s[7][1], s[7][2]]
             
-            x = (p0[0] + p1[0] + p2[0] + p3[0] + p4[0] + p5[0] + p6[0] + p7[0]) / 8
-            y = (p0[1] + p1[1] + p2[1] + p3[1] + p4[1] + p5[1] + p6[1] + p7[1]) / 8
-            z = (p0[2] + p1[2] + p2[2] + p3[2] + p4[2] + p5[2] + p6[2] + p7[2]) / 8
+        x = (p0[0] + p6[0] ) / 2
+        y = (p0[1] + p6[1] ) / 2
+        z = (p0[2] + p6[2] ) / 2
 
-            l = math.sqrt(math.pow((p1[0] - p0[0]), 2) + math.pow(p1[1] - p0[1], 2))
-            w = math.sqrt(math.pow((p3[0] - p0[0]), 2) + math.pow(p3[1] - p0[1], 2))
-            h = math.sqrt(math.pow(p4[2] - p0[2], 2))
-            sina = float((p0[0] - p1[0]) / l)
-            cosa = float((p0[1] - p1[1]) / l)
-            yaw = math.atan(sina / cosa)
-            obj = [row["label"], x,y, z, w, l, h, yaw] 
-            matri_ret.append(obj)
-            numb_ob = numb_ob + 1
+        l = math.sqrt(math.pow((p1[0] - p0[0]), 2) + math.pow(p1[1] - p0[1], 2))
+        w = math.sqrt(math.pow((p3[0] - p0[0]), 2) + math.pow(p3[1] - p0[1], 2))
+        h = math.sqrt(math.pow(p4[2] - p0[2], 2))
+        yaw = np.arctan2(p1[1] - p0[1], p1[0] - p0[0])
 
+        obj = [row["label"], x, y, z, l, w, h, yaw]
+        matri_ret.append(obj)
     return np.array(matri_ret), numb_ob
 
 def filterByDensity(cubiod_pandas,lidar_pandas):
@@ -178,12 +176,12 @@ def write_file(filename, annos, num):
             y = y_all[k]
             z = z_all[k]
             ry = ry_all[k]
-            ry = math.degrees(ry)
+            ry = np.rad2deg(ry)
             label = str(label_all[k])
             bboxes = bboxes_all[k]
             beta = np.arctan2(z, x)
             alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-            annotations = '%s 0 0 %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f 0'%(label,alpha,bboxes[0],bboxes[1],bboxes[2],bboxes[3],h,w,l,x,y,z,ry)
+            annotations = '%s 0 0 %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f 0'%(label,alpha,bboxes[0],bboxes[1],bboxes[2],bboxes[3],h,w,l,x,z,y,ry)
             f.write(annotations)
             f.write('\n')
     f.close()
@@ -206,6 +204,15 @@ def transfer(i):
             cubiod_pandas = seq.cuboids[j0]
             cubiod_pandas = filterByDensity(cubiod_pandas,lidar_pandas)
             cubiod_pandas, cubiod_projected_2d = imgProcess(seq,cubiod_pandas,j0) # find 2d bounding box
+
+
+            # lidarPoint transfer
+            lidar_np = lidar_pandas.to_numpy()[:,:4]
+            ego_lidar_np = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
+            lidar_np = np.column_stack((ego_lidar_np,lidar_np[:,3])) # aggregate data, lidar_np[:,3] is tensity
+
+            lidar_np[:,[0,1]] = lidar_np[:,[1,0]]
+            lidar_np[:,3] /= 255.
             # annotation word->ego
             matric_res,num_obj = cuboids_to_boxes(cubiod_pandas, lidar_pose)
             cubiod_pandas['yaw'] = matric_res[:,7]
@@ -223,20 +230,24 @@ def transfer(i):
 
 
             h_all = cubiod_pandas.iloc[:,10].to_numpy().astype(np.float32) #h
-            w_all = cubiod_pandas.iloc[:,8].to_numpy().astype(np.float32)  #w
-            l_all = cubiod_pandas.iloc[:,9].to_numpy().astype(np.float32) #l
+            w_all = cubiod_pandas.iloc[:,9].to_numpy().astype(np.float32)  #w
+            l_all = cubiod_pandas.iloc[:,8].to_numpy().astype(np.float32) #l
             position = cubiod_pandas.iloc[:,5:8].to_numpy().astype(np.float32) #长方体点云坐标 position区域
             ry_all = cubiod_pandas['yaw'].to_numpy().astype(np.float32) #rotation
             x_all = position[:,0]
             y_all = position[:,1]
             z_all = position[:,2]
-            
+            '''
             #print(x_all)
             # lidarPoint transfer
             lidar_np = lidar_pandas.to_numpy()[:,:4]
-            ego_lidar_np = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
+            ego_lidar_np,_ = geometry.lidar_points_to_ego(lidar_np[:, :3], lidar_pose)
             lidar_np = np.column_stack((ego_lidar_np,lidar_np[:,3])) # aggregate data, lidar_np[:,3] is tensity
 
+
+            lidar_np[:,[0,1]] = lidar_np[:,[1,0]]
+            lidar_np[:,3] /= 255.
+            '''
             # store
             global idx
             img = object
