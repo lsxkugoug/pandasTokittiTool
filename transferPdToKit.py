@@ -4,11 +4,9 @@ import math
 from pandaset import geometry
 from pathlib import Path
 import os
-from mayavi import mlab
 import matplotlib.pyplot as plt
 import pandas as pd
 
-import tracemalloc
 import sys,os
 
 # dir string
