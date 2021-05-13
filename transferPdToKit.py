@@ -4,11 +4,9 @@ import math
 from pandaset import geometry
 from pathlib import Path
 import os
-from mayavi import mlab
 import matplotlib.pyplot as plt
 import pandas as pd
 
-import tracemalloc
 import sys,os
 
 # dir string
@@ -119,7 +117,7 @@ def filterByDensity(cubiod_pandas,lidar_pandas):
 
         density = constrain_lidar.shape[0]/volume
 
-        if (density<min_density) | (density==0):
+        if (density<10) | (density==0):
             cubiod_pandas = cubiod_pandas.drop(index)
     
     return cubiod_pandas
