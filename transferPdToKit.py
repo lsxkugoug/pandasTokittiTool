@@ -129,7 +129,7 @@ def imgProcess(seq,cubiod_pandas,j):
     2. used to generate 2d bounding box on img
     '''
     camera_name = "front_camera"
-    points3d_lidar_xyz = cubiod_pandas.to_numpy()[:,5:8].astype(np.float) # position xyz
+    points3d_lidar_xyz = cubiod_pandas.to_numpy()[:,5:8].astype(np.float32) # position xyz
     choosen_camera = seq.camera[camera_name]
     projected_points2d, camera_points_3d, inner_indices = geometry.projection(lidar_points=points3d_lidar_xyz, 
                                                                             camera_data=choosen_camera[j],
